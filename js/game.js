@@ -25,9 +25,149 @@
     "exotic-mystery":  { id: "exotic-mystery",  name: "异域谜踪", icon: "🏜️", desc: "沙漠、江河与远方——危险藏在异乡目光背后", color: "#d4a256" },
     "dark-hearts":     { id: "dark-hearts",     name: "人间恶魔", icon: "🔪", desc: "藏在人皮之下的深渊——连环杀手与变态心理", color: "#c46a6a" },
     "disappearance":   { id: "disappearance",   name: "失踪谜案", icon: "🌫️", desc: "消失在雾中的身影——比死亡更令人不安", color: "#9a8fbf" },
+    "small-town":      { id: "small-town",      name: "故里疑云", icon: "🏘️", desc: "平静小镇深处，每个人都在藏一个秘密", color: "#b8965c" },
   };
 
-  // ---------- 勋章系统 ----------
+  // ---------- 隐藏勋章 ----------
+  const HIDDEN_BADGES = [
+    {
+      id: "nostalgia-master",
+      name: "怀旧仙人",
+      icon: "\uD83D\uDCDC",
+      desc: "连续通关三个百年以上的古老案件",
+      color: "#c9a86a",
+      check: (history) => {
+        let streak = 0;
+        for (let i = history.length - 1; i >= 0; i--) {
+          const c = CASES.find(cs => cs.id === history[i]);
+          if (c && c.isAncient) streak++;
+          else break;
+        }
+        return streak >= 3;
+      }
+    },
+    {
+      id: "focus-master",
+      name: "专注勋章",
+      icon: "\uD83C\uDFAF",
+      desc: "连续通关某个分类的全部案件",
+      color: "#8fb3a3",
+      check: (history) => {
+        if (history.length < 2) return false;
+        const lastCat = CASES.find(c => c.id === history[history.length - 1])?.category;
+        if (!lastCat) return false;
+        const allInCat = CASES.filter(c => c.category === lastCat).map(c => c.id);
+        if (allInCat.length < 2) return false;
+        // 检查历史末尾是否包含该分类的全部案件（连续）
+        let streak = 0;
+        const catsInStreak = new Set();
+        for (let i = history.length - 1; i >= 0; i--) {
+          const c = CASES.find(cs => cs.id === history[i]);
+          if (c && c.category === lastCat) { streak++; catsInStreak.add(c.id); }
+          else break;
+        }
+        return catsInStreak.size === allInCat.length && streak >= allInCat.length;
+      }
+    },
+    {
+      id: "podcast-echo",
+      name: "播客回声",
+      icon: "\uD83C\uDF99\uFE0F",
+      desc: "连续通关三个霓达播客改编案件",
+      color: "#d4a256",
+      check: (history) => {
+        let streak = 0;
+        for (let i = history.length - 1; i >= 0; i--) {
+          const c = CASES.find(cs => cs.id === history[i]);
+          if (c && c.source === "nida") streak++;
+          else break;
+        }
+        return streak >= 3;
+      }
+    },
+  ];
+
+  // 播放历史
+  const HISTORY_KEY = "detective_history_v2";
+  function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } }
+  function saveHistory(h) { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {} }
+  function addToHistory(caseId) {
+    let h = loadHistory();
+    // 去重：如果刚才玩过同一个案子，先移除旧记录
+    h = h.filter(id => id !== caseId);
+    h.push(caseId);
+    if (h.length > 50) h = h.slice(-50); // 最多保留50条
+    saveHistory(h);
+    return h;
+  }
+
+  // ---------- 音效系统 ----------
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+    }
+    return audioCtx;
+  }
+  function playClickSound() {
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = "sine"; o.frequency.setValueAtTime(800, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
+    g.gain.setValueAtTime(0.08, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.1);
+  }
+  function playBadgeSound() {
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = "triangle";
+      const t = ctx.currentTime + i * 0.12;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.12, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.start(t); o.stop(t + 0.3);
+    });
+  }
+
+  // ---------- 粒子动画 ----------
+  function spawnBadgeParticles(x, y, color) {
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement("div");
+      p.className = "badge-particle";
+      const angle = (Math.PI * 2 * i) / 20;
+      const dist = 60 + Math.random() * 80;
+      p.style.cssText = `
+        left:${x}px; top:${y}px;
+        --dx:${Math.cos(angle) * dist}px;
+        --dy:${Math.sin(angle) * dist}px;
+        background:${color};
+        animation-delay:${Math.random() * 0.2}s;
+      `;
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 1200);
+    }
+  }
+
+  function addCaseCardRipple(e) {
+    const card = e.currentTarget;
+    const ripple = document.createElement("span");
+    ripple.className = "case-ripple";
+    const rect = card.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    ripple.style.width = ripple.style.height = size + "px";
+    ripple.style.left = (e.clientX - rect.left - size / 2) + "px";
+    ripple.style.top = (e.clientY - rect.top - size / 2) + "px";
+    card.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  }
   const BADGE_KEY = "detective_badges_v2";
   function loadBadges() {
     try { return JSON.parse(localStorage.getItem(BADGE_KEY)) || {}; }
@@ -66,6 +206,10 @@
   function getUnlockedBadges() {
     const badges = loadBadges();
     return Object.keys(CATEGORIES).filter(k => k !== "all" && badges[k]).map(k => CATEGORIES[k]);
+  }
+  function getUnlockedHiddenBadges() {
+    const badges = loadBadges();
+    return HIDDEN_BADGES.filter(hb => badges[hb.id]);
   }
 
   const CATEGORY_META = {
@@ -132,20 +276,28 @@
   // ---------- 首页 ----------
   function renderHome() {
     const badges = getUnlockedBadges();
+    const hiddenBadges = getUnlockedHiddenBadges();
     const badgeHtml = badges.length > 0 ? `
       <div class="home-badges">
         <div class="home-badges-label">🏆 已解锁勋章</div>
         <div class="home-badges-row">
           ${badges.map(b => `<span class="badge-chip" style="--bcolor:${b.color}">${b.icon} ${b.name}</span>`).join("")}
         </div>
-      </div>` : `
+      </div>` : "";
+    const hiddenHtml = `
       <div class="home-badges">
-        <div class="home-badges-label">🏆 已解锁勋章</div>
-        <div class="home-badges-empty">通关一个分类的所有案件即可解锁对应勋章</div>
+        <div class="home-badges-label">🔮 隐藏勋章（${hiddenBadges.length}/${HIDDEN_BADGES.length}）</div>
+        <div class="home-badges-row">
+          ${HIDDEN_BADGES.map(hb => {
+            const unlocked = hiddenBadges.some(b => b.id === hb.id);
+            return `<span class="badge-chip ${unlocked ? '' : 'badge-locked'}" style="--bcolor:${hb.color}">${unlocked ? hb.icon : '❓'} ${unlocked ? hb.name : '???'}</span>`;
+          }).join("")}
+        </div>
       </div>`;
+    const totalBadgeCount = badges.length + hiddenBadges.length;
 
     const totalSolved = CASES.filter(c => isSolved(c.id)).length;
-    const statsHtml = totalSolved > 0 ? `<div class="home-stats">已破案 <strong>${totalSolved}</strong> / ${CASES.length}</div>` : "";
+    const statsHtml = totalSolved > 0 ? `<div class="home-stats">已破案 <strong>${totalSolved}</strong> / ${CASES.length}  ·  勋章 <strong>${totalBadgeCount}</strong> / ${Object.keys(CATEGORIES).length - 1 + HIDDEN_BADGES.length}</div>` : "";
 
     return `
       <section class="screen home">
@@ -154,6 +306,7 @@
           <h1 class="home-title">罪案推理<span>·</span>侦探笔记</h1>
           <p class="home-sub">以真实历史背景为蓝本改编的谜案。<br>勘查线索、推敲证词，用逻辑揪出真凶。</p>
           ${badgeHtml}
+          ${hiddenHtml}
           ${statsHtml}
           <button class="btn btn-primary btn-lg" data-act="start">翻开案件簿</button>
           <div class="home-foot">案件内容均为原创戏剧化改编，基于公共领域历史事件。不涉及任何版权播客内容。</div>
@@ -542,6 +695,8 @@
         go("home");
         break;
       case "open-case":
+        playClickSound();
+        addCaseCardRipple(e);
         State.caseId = el.dataset.id;
         State.examined = new Set();
         State.selectedSuspect = null;
@@ -599,12 +754,25 @@
         go("reveal");
         // 标记已通关并检查勋章
         markSolved(State.caseId);
+        const history = addToHistory(State.caseId);
         setTimeout(() => {
           const cat = getCase().category;
           if (cat) {
             const badge = checkAndAwardBadge(cat);
-            if (badge) showBadgeToast(badge);
+            if (badge) { playBadgeSound(); showBadgeToast(badge); }
           }
+          // 检查隐藏勋章（延迟，避免与分类勋章冲突）
+          setTimeout(() => {
+            const badges = loadBadges();
+            HIDDEN_BADGES.forEach(hb => {
+              if (!badges[hb.id] && hb.check(history)) {
+                badges[hb.id] = true;
+                saveBadges(badges);
+                playBadgeSound();
+                showBadgeToast(hb, true);
+              }
+            });
+          }, 800);
         }, 1200);
         break;
       case "filter-cat":
@@ -648,14 +816,17 @@
   }
 
   // 勋章获得 toast
-  function showBadgeToast(cat) {
+  function showBadgeToast(badge, isHidden) {
+    const isH = !!isHidden;
     const toast = document.createElement("div");
-    toast.className = "badge-toast";
-    toast.innerHTML = `<span class="badge-toast-icon">${cat.icon}</span><div><strong>勋章解锁！</strong><br>${cat.name}</div>`;
+    toast.className = "badge-toast" + (isH ? " badge-toast-hidden" : "");
+    toast.innerHTML = `<span class="badge-toast-icon">${badge.icon}</span><div><strong>${isH ? '🔮 隐藏勋章解锁！' : '勋章解锁！'}</strong><br>${badge.name}</div>`;
     document.body.appendChild(toast);
+    const rect = toast.getBoundingClientRect();
+    spawnBadgeParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, badge.color);
     setTimeout(() => { toast.classList.add("show"); }, 50);
-    setTimeout(() => { toast.classList.remove("show"); }, 3500);
-    setTimeout(() => { toast.remove(); }, 4000);
+    setTimeout(() => { toast.classList.remove("show"); }, 4000);
+    setTimeout(() => { toast.remove(); }, 4600);
   }
 
   // ---------- 启动 ----------
