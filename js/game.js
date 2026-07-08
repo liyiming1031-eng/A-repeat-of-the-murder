@@ -323,25 +323,34 @@
     const keySet = new Set(sol.keyEvidence);
     let keyHit = 0;
     keySet.forEach((id) => { if (State.selectedEvidence.has(id)) keyHit++; });
-    const evidenceScore = Math.round((keyHit / keySet.size) * 100);
 
-    // 综合评分
+    // 误导证据计数（选中的非关键证据 = 误导或被干扰）
+    let misleading = 0;
+    State.selectedEvidence.forEach((id) => {
+      if (!keySet.has(id)) misleading++;
+    });
+    // 惩罚公式：每选一个错误证据扣 10% 命中分
+    const rawHit = (keyHit / keySet.size) * 100;
+    const penalty = misleading * 10;
+    const evidenceScore = Math.max(0, Math.round(rawHit - penalty));
+
+    // 严格综合评分
     let verdict, verdictDesc, score;
-    if (correct && evidenceScore >= 75) {
+    if (correct && evidenceScore >= 80) {
       verdict = "完美推理";
-      verdictDesc = "你精准锁定真凶，并呈上了决定性铁证。教科书般的演绎。";
+      verdictDesc = "你精准锁定真凶，呈上全部铁证且未被误导线索所惑。";
       score = "S";
-    } else if (correct && evidenceScore >= 40) {
+    } else if (correct && evidenceScore >= 50) {
       verdict = "破案成功";
-      verdictDesc = "你揪出了真凶，部分关键证据也已到位。";
+      verdictDesc = "你揪出了真凶，但证据链尚有漏洞——有些线索干扰了你的判断。";
       score = "A";
     } else if (correct) {
-      verdict = "侥幸破案";
-      verdictDesc = "凶手虽被指认，但支撑结论的铁证尚有欠缺。";
+      verdict = "推理存疑";
+      verdictDesc = "真凶落网，但你未能呈上充足铁证，此案难以定罪。";
       score = "B";
     } else {
       verdict = "推理失误";
-      verdictDesc = "真凶另有其人。复盘线索，看看哪里漏了关键一环。";
+      verdictDesc = "真凶另有其人。带着复盘的眼光，看看哪里漏了关键一环。";
       score = "—";
     }
 
@@ -353,6 +362,26 @@
           <div class="reason-body">${esc(r.text)}</div>
         </div>
       </div>`).join("");
+
+    // 证据评审：列出玩家选中的线索并标注对错
+    let evidenceReview = "";
+    if (State.selectedEvidence.size > 0) {
+      const reviewItems = c.clues
+        .filter((cl) => State.selectedEvidence.has(cl.id))
+        .map((cl) => {
+          const isKey = keySet.has(cl.id);
+          return `<div class="ev-review-item ${isKey ? 'ev-correct' : 'ev-wrong'}">
+            <span class="ev-review-dot" style="background:${CATEGORY_META[cl.category].color}"></span>
+            <span class="ev-review-title">${esc(cl.title)}</span>
+            <span class="ev-review-tag">${isKey ? '✓ 关键证据' : '✗ 误导线索'}</span>
+          </div>`;
+        }).join("");
+      evidenceReview = `
+        <div class="reveal-section">
+          <h3 class="reveal-h">你的呈堂证据评审</h3>
+          <div class="ev-review-list">${reviewItems}</div>
+        </div>`;
+    }
 
     return `
       <section class="screen reveal ${correct ? 'reveal-ok' : 'reveal-fail'}">
@@ -378,6 +407,8 @@
               <div class="culprit-role">${esc(culprit.role)}</div>
             </div>
           </div>
+
+          ${evidenceReview}
 
           <div class="reveal-section">
             <h3 class="reveal-h">作案手法</h3>

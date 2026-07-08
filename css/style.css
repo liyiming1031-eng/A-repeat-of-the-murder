@@ -602,6 +602,24 @@ body {
   flex-wrap: wrap;
 }
 
+/* 证据评审 */
+.ev-review-list { display: flex; flex-direction: column; gap: 8px; }
+.ev-review-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.ev-review-item.ev-correct { background: rgba(143, 179, 163, 0.12); border: 1px solid rgba(143, 179, 163, 0.3); }
+.ev-review-item.ev-wrong  { background: rgba(196, 106, 106, 0.12); border: 1px solid rgba(196, 106, 106, 0.3); }
+.ev-review-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ev-review-title { flex: 1; }
+.ev-review-tag { font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.ev-correct .ev-review-tag { color: #8fb3a3; }
+.ev-wrong .ev-review-tag { color: #c46a6a; }
+
 /* ============================================================
    响应式
    ============================================================ */
