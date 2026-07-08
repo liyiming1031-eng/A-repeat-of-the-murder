@@ -620,6 +620,64 @@ body {
 .ev-correct .ev-review-tag { color: #8fb3a3; }
 .ev-wrong .ev-review-tag { color: #c46a6a; }
 
+/* 分类标签 */
+.cat-tabs-scroll { overflow-x: auto; padding: 0 32px; margin-bottom: 4px; }
+.cat-tabs { flex-wrap: nowrap; padding-bottom: 4px; }
+.cat-tab { white-space: nowrap; }
+.cat-tab.cat-done .cat-check { font-size: 14px; }
+.cat-check { font-size: 14px; }
+
+/* 分类小型标签 */
+.case-cat-tag { font-size: 11px; margin-left: 6px; }
+
+/* 已解答标记 */
+.solved-badge { color: var(--good); font-size: 18px; margin-left: 6px; }
+.case-card.case-solved { border-color: rgba(143, 179, 163, 0.3); }
+.case-card.case-solved::before { background: var(--good); }
+
+/* 勋章系统 */
+.home-badges { margin: 24px 0 16px; }
+.home-badges-label { font-size: 12px; color: var(--text-faint); letter-spacing: 2px; margin-bottom: 12px; }
+.home-badges-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.home-badges-empty { font-size: 13px; color: var(--text-faint); font-style: italic; }
+.badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(201, 168, 106, 0.1);
+  border: 1px solid var(--bcolor, var(--accent));
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.home-stats { font-size: 14px; color: var(--text-dim); margin-bottom: 20px; }
+.home-stats strong { color: var(--accent); }
+
+/* 勋章 toast */
+.badge-toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 200;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.badge-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.badge-toast-icon { font-size: 36px; }
+.badge-toast strong { display: block; font-family: var(--serif); font-size: 17px; color: var(--accent); }
+.badge-toast div { font-size: 13px; color: var(--text-dim); }
+
 /* ============================================================
    响应式
    ============================================================ */

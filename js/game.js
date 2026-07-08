@@ -10,11 +10,63 @@
   const State = {
     screen: "home",
     caseId: null,
-    examined: new Set(), // 已勘查的 clue.id
-    selectedSuspect: null, // 推理阶段选中的嫌疑人 id
-    selectedEvidence: new Set(), // 推理阶段选中的关键证据 clue.id
-    revealed: false, // 是否已揭晓
+    examined: new Set(),
+    selectedSuspect: null,
+    selectedEvidence: new Set(),
+    revealed: false,
+    categoryFilter: null,  // 当前选中的分类 id，null = 全部
   };
+
+  // ---------- 案件分类 ----------
+  const CATEGORIES = {
+    all: { id: "all", name: "全部案件", icon: "📋", desc: "", color: "#c9a86a" },
+    "turbulent-times": { id: "turbulent-times", name: "乱世风云", icon: "🚢", desc: "动荡年代的血色交易与权力暗涌", color: "#c9a86a" },
+    "locked-room":     { id: "locked-room",     name: "密室诡计", icon: "🏚️", desc: "门与窗皆从内反锁——凶手却已抽身", color: "#7a9cc6" },
+    "exotic-mystery":  { id: "exotic-mystery",  name: "异域谜踪", icon: "🏜️", desc: "沙漠、江河与远方——危险藏在异乡目光背后", color: "#d4a256" },
+    "dark-hearts":     { id: "dark-hearts",     name: "人间恶魔", icon: "🔪", desc: "藏在人皮之下的深渊——连环杀手与变态心理", color: "#c46a6a" },
+    "disappearance":   { id: "disappearance",   name: "失踪谜案", icon: "🌫️", desc: "消失在雾中的身影——比死亡更令人不安", color: "#9a8fbf" },
+  };
+
+  // ---------- 勋章系统 ----------
+  const BADGE_KEY = "detective_badges_v2";
+  function loadBadges() {
+    try { return JSON.parse(localStorage.getItem(BADGE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveBadges(b) {
+    try { localStorage.setItem(BADGE_KEY, JSON.stringify(b)); }
+    catch (e) { /* localStorage 不可用时静默失败 */ }
+  }
+  function markSolved(caseId) {
+    const b = loadBadges();
+    b["solved_" + caseId] = true;
+    saveBadges(b);
+  }
+  function isSolved(caseId) {
+    return !!loadBadges()["solved_" + caseId];
+  }
+  function categoryProgress(catId) {
+    const casesInCat = CASES.filter(c => c.category === catId);
+    if (casesInCat.length === 0) return { total: 0, solved: 0 };
+    const solved = casesInCat.filter(c => isSolved(c.id)).length;
+    return { total: casesInCat.length, solved };
+  }
+  function checkAndAwardBadge(catId) {
+    if (catId === "all") return null;
+    const badges = loadBadges();
+    if (badges[catId]) return null; // 已有勋章
+    const prog = categoryProgress(catId);
+    if (prog.total > 0 && prog.solved === prog.total) {
+      badges[catId] = true;
+      saveBadges(badges);
+      return CATEGORIES[catId];
+    }
+    return null;
+  }
+  function getUnlockedBadges() {
+    const badges = loadBadges();
+    return Object.keys(CATEGORIES).filter(k => k !== "all" && badges[k]).map(k => CATEGORIES[k]);
+  }
 
   const CATEGORY_META = {
     scene: { label: "案发现场", icon: "🔍", color: "#c9a86a" },
@@ -79,28 +131,67 @@
 
   // ---------- 首页 ----------
   function renderHome() {
+    const badges = getUnlockedBadges();
+    const badgeHtml = badges.length > 0 ? `
+      <div class="home-badges">
+        <div class="home-badges-label">🏆 已解锁勋章</div>
+        <div class="home-badges-row">
+          ${badges.map(b => `<span class="badge-chip" style="--bcolor:${b.color}">${b.icon} ${b.name}</span>`).join("")}
+        </div>
+      </div>` : `
+      <div class="home-badges">
+        <div class="home-badges-label">🏆 已解锁勋章</div>
+        <div class="home-badges-empty">通关一个分类的所有案件即可解锁对应勋章</div>
+      </div>`;
+
+    const totalSolved = CASES.filter(c => isSolved(c.id)).length;
+    const statsHtml = totalSolved > 0 ? `<div class="home-stats">已破案 <strong>${totalSolved}</strong> / ${CASES.length}</div>` : "";
+
     return `
       <section class="screen home">
         <div class="home-inner">
           <div class="home-mark">🕯️</div>
           <h1 class="home-title">罪案推理<span>·</span>侦探笔记</h1>
-          <p class="home-sub">一桩桩以真实历史背景为蓝本改编的谜案。<br>勘查线索、推敲证词，用逻辑揪出真凶。</p>
+          <p class="home-sub">以真实历史背景为蓝本改编的谜案。<br>勘查线索、推敲证词，用逻辑揪出真凶。</p>
+          ${badgeHtml}
+          ${statsHtml}
           <button class="btn btn-primary btn-lg" data-act="start">翻开案件簿</button>
-          <div class="home-foot">本作案件为面向游戏体验的戏剧化改编，不涉及任何版权播客内容。</div>
+          <div class="home-foot">案件内容均为原创戏剧化改编，基于公共领域历史事件。不涉及任何版权播客内容。</div>
         </div>
       </section>`;
   }
 
   // ---------- 案件选择 ----------
   function renderCaseSelect() {
-    const cards = CASES.map((c) => {
+    const activeCat = State.categoryFilter || "all";
+
+    // 分类标签
+    const catTabs = Object.values(CATEGORIES).map(cat => {
+      const active = activeCat === cat.id;
+      const isAll = cat.id === "all";
+      const prog = isAll ? { total: CASES.length, solved: CASES.filter(c => isSolved(c.id)).length }
+                         : categoryProgress(cat.id);
+      const done = prog.total > 0 && prog.solved === prog.total;
+      return `<button class="tab cat-tab ${active ? 'active' : ''} ${done ? 'cat-done' : ''}" data-act="filter-cat" data-cat="${cat.id}">
+        <span class="tab-icon">${cat.icon}</span>
+        <span class="tab-label">${cat.name}</span>
+        <span class="tab-count">${prog.solved}/${prog.total}</span>
+        ${done ? '<span class="cat-check">🏆</span>' : ''}
+      </button>`;
+    }).join("");
+
+    // 根据分类筛选案件
+    const filtered = CASES.filter(c => activeCat === "all" || c.category === activeCat);
+    const cards = filtered.map((c) => {
+      const solved = isSolved(c.id);
+      const cat = CATEGORIES[c.category] || CATEGORIES.all;
       return `
-        <article class="case-card" data-act="open-case" data-id="${c.id}" style="--accent:${c.accent}">
+        <article class="case-card ${solved ? 'case-solved' : ''}" data-act="open-case" data-id="${c.id}" style="--accent:${c.accent}">
           <div class="case-card-top">
-            <span class="case-era">${esc(c.era)}</span>
+            <span class="case-era">${esc(c.era)} <span class="case-cat-tag" style="color:${cat.color}">${cat.icon} ${cat.name}</span></span>
             <span class="case-diff">${difficultyDots(c.difficulty)}</span>
           </div>
-          <h3 class="case-title">${esc(c.title)}</h3>
+          <h3 class="case-title">${esc(c.title)} ${solved ? '<span class="solved-badge">✓</span>' : ''}</h3>
           <div class="case-subtitle">${esc(c.subtitle)}</div>
           <p class="case-synopsis">${esc(c.synopsis)}</p>
           <div class="case-meta">
@@ -108,9 +199,10 @@
             <span>👤 ${c.suspects.length} 名嫌疑人</span>
             <span>🔎 ${c.clues.length} 条线索</span>
           </div>
-          <div class="case-card-cta">展开调查 →</div>
+          <div class="case-card-cta">${solved ? '重新调查 →' : '展开调查 →'}</div>
         </article>`;
     }).join("");
+
     return `
       <section class="screen">
         <header class="topbar">
@@ -118,6 +210,9 @@
           <h2 class="topbar-title">案件簿</h2>
           <span></span>
         </header>
+        <div class="cat-tabs-scroll">
+          <div class="tabs cat-tabs">${catTabs}</div>
+        </div>
         <div class="case-grid">${cards}</div>
       </section>`;
   }
@@ -502,6 +597,19 @@
       case "reveal":
         State.revealed = true;
         go("reveal");
+        // 标记已通关并检查勋章
+        markSolved(State.caseId);
+        setTimeout(() => {
+          const cat = getCase().category;
+          if (cat) {
+            const badge = checkAndAwardBadge(cat);
+            if (badge) showBadgeToast(badge);
+          }
+        }, 1200);
+        break;
+      case "filter-cat":
+        State.categoryFilter = el.dataset.cat === "all" ? null : el.dataset.cat;
+        render();
         break;
       case "replay": {
         const id = State.caseId;
@@ -537,6 +645,17 @@
       modal.style.display = "none";
       modal.innerHTML = "";
     }
+  }
+
+  // 勋章获得 toast
+  function showBadgeToast(cat) {
+    const toast = document.createElement("div");
+    toast.className = "badge-toast";
+    toast.innerHTML = `<span class="badge-toast-icon">${cat.icon}</span><div><strong>勋章解锁！</strong><br>${cat.name}</div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.classList.add("show"); }, 50);
+    setTimeout(() => { toast.classList.remove("show"); }, 3500);
+    setTimeout(() => { toast.remove(); }, 4000);
   }
 
   // ---------- 启动 ----------
